@@ -76,7 +76,7 @@ python main.py --demo
 
 - **GitHub**: [@Major-Woolfi](https://github.com/major-woolfi)
 - **Свой сайт**: majorwoolfi.ddns.net
-- **Email**: majorwoolfi@gmail.com
+- **Email**: [majorwoolfi@gmail.com](https://majorwoolfi.ddns.net)
 - **Telegram**: [@Major_Woolfi](https://t.me/Major_Woolfi)
 
 ## 📄 Лицензия
