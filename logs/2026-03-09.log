@@ -1,0 +1,81 @@
+2026-03-09 18:15:06,009 - INFO - __main__ - Инициализация микросервисов...
+2026-03-09 18:15:06,010 - CRITICAL - __main__ - Критическая ошибка: module 'VirtualBox' has no attribute 'main'
+Traceback (most recent call last):
+  File "c:\Users\Майор Вулфи\Desktop\Project_Mira\main.py", line 67, in main
+    asyncio.create_task(run_service("VirtualBox", VirtualBox.main)),
+                                                  ^^^^^^^^^^^^^^^
+AttributeError: module 'VirtualBox' has no attribute 'main'
+2026-03-09 18:15:06,011 - INFO - __main__ - Остановка всех микросервисов...
+2026-03-09 18:15:06,011 - INFO - __main__ - Все микросервисы остановлены
+2026-03-09 18:15:06,011 - INFO - __main__ - Запуск сервиса: admin-panel
+2026-03-09 18:15:06,012 - INFO - admin.panel - Админ-панель успешно запущена!
+2026-03-09 18:19:45,153 - INFO - __main__ - Инициализация микросервисов...
+2026-03-09 18:19:45,154 - CRITICAL - __main__ - Критическая ошибка: module 'VirtualBox' has no attribute 'main'
+Traceback (most recent call last):
+  File "c:\Users\Майор Вулфи\Desktop\Project_Mira\main.py", line 67, in main
+    asyncio.create_task(run_service("VirtualBox", VirtualBox.main)),
+                                                  ^^^^^^^^^^^^^^^
+AttributeError: module 'VirtualBox' has no attribute 'main'
+2026-03-09 18:19:45,155 - INFO - __main__ - Остановка всех микросервисов...
+2026-03-09 18:19:45,155 - INFO - __main__ - Все микросервисы остановлены
+2026-03-09 18:19:45,155 - INFO - __main__ - Запуск сервиса: admin-panel
+2026-03-09 18:19:45,155 - INFO - admin.panel - Админ-панель успешно запущена!
+2026-03-09 18:23:15,027 - INFO - __main__ - Инициализация микросервисов...
+2026-03-09 18:23:15,027 - CRITICAL - __main__ - Критическая ошибка при инициализации: module 'VirtualBox' has no attribute 'main'
+Traceback (most recent call last):
+  File "c:\Users\Майор Вулфи\Desktop\Project_Mira\main.py", line 67, in main
+    asyncio.create_task(run_service("VirtualBox", VirtualBox.main)),
+                                                  ^^^^^^^^^^^^^^^
+AttributeError: module 'VirtualBox' has no attribute 'main'
+2026-03-09 18:23:15,028 - INFO - __main__ - Все микросервисы остановлены
+2026-03-09 18:23:15,029 - INFO - __main__ - Запуск сервиса: admin-panel
+2026-03-09 18:23:15,029 - INFO - admin.panel - Админ-панель успешно запущена!
+2026-03-09 18:25:41,059 - INFO - __main__ - Инициализация микросервисов...
+2026-03-09 18:25:41,059 - CRITICAL - __main__ - Критическая ошибка при инициализации: module 'VirtualBox' has no attribute 'main'
+Traceback (most recent call last):
+  File "c:\Users\Майор Вулфи\Desktop\Project_Mira\main.py", line 66, in main
+    tasks.append(asyncio.create_task(run_service("VirtualBox", VirtualBox.main)))
+                                                               ^^^^^^^^^^^^^^^
+AttributeError: module 'VirtualBox' has no attribute 'main'
+2026-03-09 18:25:41,061 - INFO - __main__ - Все микросервисы остановлены
+2026-03-09 18:27:25,046 - INFO - __main__ - Инициализация...
+2026-03-09 18:27:25,046 - CRITICAL - __main__ - Критическая ошибка при инициализации: module 'VirtualBox' has no attribute 'main'
+Traceback (most recent call last):
+  File "c:\Users\Майор Вулфи\Desktop\Project_Mira\main.py", line 66, in main
+    tasks.append(asyncio.create_task(run_service("VirtualBox", VirtualBox.main)))
+                                                               ^^^^^^^^^^^^^^^
+AttributeError: module 'VirtualBox' has no attribute 'main'
+2026-03-09 18:27:25,047 - INFO - __main__ - Все микросервисы остановлены
+2026-03-09 18:29:13,810 - INFO - __main__ - Инициализация...
+2026-03-09 18:29:13,811 - INFO - __main__ - Запуск admin-panel
+2026-03-09 18:29:13,811 - INFO - admin.panel - Админ-панель успешно запущена!
+2026-03-09 18:29:13,811 - INFO - __main__ - Запуск VirtualBox
+2026-03-09 18:29:13,811 - INFO - VirtualBox - VirtualBox успешно запущен!
+2026-03-09 18:29:13,812 - INFO - __main__ - Запуск core
+2026-03-09 18:29:13,812 - INFO - core - Ядро успешно запущено!
+2026-03-09 18:29:13,812 - INFO - __main__ - Закрытие программы...
+2026-03-09 18:29:13,812 - INFO - __main__ - Все микросервисы остановлены
+2026-03-09 18:31:11,872 - INFO - __main__ - Инициализация...
+2026-03-09 18:31:11,872 - INFO - __main__ - Запуск admin-panel
+2026-03-09 18:31:11,873 - INFO - admin.panel - Админ-панель успешно запущена!
+2026-03-09 18:31:11,873 - INFO - __main__ - Запуск VirtualBox
+2026-03-09 18:31:11,873 - INFO - VirtualBox - VirtualBox успешно запущен!
+2026-03-09 18:31:11,873 - INFO - __main__ - Запуск core
+2026-03-09 18:31:11,873 - INFO - core - Ядро успешно запущено!
+2026-03-09 18:31:11,873 - INFO - __main__ - Остановка программы...
+2026-03-09 18:31:11,874 - CRITICAL - __main__ - Критическая ошибка при инициализации: 'set' object has no attribute 'cancel'
+Traceback (most recent call last):
+  File "c:\Users\Майор Вулфи\Desktop\Project_Mira\main.py", line 73, in main
+    task.cancel()
+    ^^^^^^^^^^^
+AttributeError: 'set' object has no attribute 'cancel'
+2026-03-09 18:31:11,875 - INFO - __main__ - Программа остановлена.
+2026-03-09 18:31:43,154 - INFO - __main__ - Инициализация...
+2026-03-09 18:31:43,155 - INFO - __main__ - Запуск admin-panel
+2026-03-09 18:31:43,155 - INFO - admin.panel - Админ-панель успешно запущена!
+2026-03-09 18:31:43,155 - INFO - __main__ - Запуск VirtualBox
+2026-03-09 18:31:43,155 - INFO - VirtualBox - VirtualBox успешно запущен!
+2026-03-09 18:31:43,155 - INFO - __main__ - Запуск core
+2026-03-09 18:31:43,156 - INFO - core - Ядро успешно запущено!
+2026-03-09 18:31:43,156 - INFO - __main__ - Остановка программы...
+2026-03-09 18:31:43,156 - INFO - __main__ - Программа остановлена.
