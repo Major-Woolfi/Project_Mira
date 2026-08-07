@@ -2,7 +2,9 @@
 
 > **Примечание:** Этот документ описывает систему хранения данных для восходящего ИИ "Мира". Архитектура рассчитана на биологический масштаб (86 миллиардов нейронов, 130 триллионов синапсов) при жёстких ограничениях по памяти (512 ГБ SSD, 64 ГБ RAM). Используется гибридный подход: процедурная связность + sparse delta-лог с LZ4-сжатием.
 
-## 📑 Быстрая навигация
+---
+
+## 📑 Содержание
 
 - [Общая концепция](#-общая-концепция)
 - [Биологическая модель нейрона](#-биологическая-модель-нейрона-adex)
@@ -11,11 +13,11 @@
 - [Файл base.mcog](#-файл-basemcog-процедурный-слой)
 - [Файл delta.wal](#-файл-deltawal-слой-модификаций)
 - [Математика объёмов](#-математика-объёмов)
-- [Алгоритмы работы](#-алгоритмы-работы)
+- [Алгоритмы работы](#️-алгоритмы-работы)
 - [Реализация на Go](#-реализация-на-go)
 - [Примеры кода](#-примеры-кода)
 - [Оптимизации](#-оптимизации)
-- [Компромиссы](#-компромиссы)
+- [Компромиссы](#️-компромиссы)
 - [RAM-стратегия](#-ram-стратегия)
 
 ---
@@ -36,11 +38,11 @@
 
 ### Архитектура v3 (Human-Scale)
 
-```
+```plaintext
 ┌─────────────────────────────────────────────────────────┐
-│                    Mira Memory System                     │
+│                    Mira Memory System                   │
 ├─────────────────────────────────────────────────────────┤
-│                                                           │
+│                                                         │
 │  ┌──────────────┐              ┌──────────────┐         │
 │  │  base.mcog   │              │  delta.wal   │         │
 │  │  (Read-Only) │              │ (Append-Only)│         │
@@ -57,14 +59,15 @@
 │                       │                                  │
 │                       ▼                                  │
 │         ┌──────────────────────────┐                    │
-│         │  Virtual Synapse Iterator │                    │
-│         │  (объединяет Base+Delta)  │                    │
+│         │ Virtual Synapse Iterator │                    │
+│         │ (объединяет Base+Delta)  │                    │
 │         └──────────────────────────┘                    │
-│                                                           │
+│                                                         │
 └─────────────────────────────────────────────────────────┘
 ```
 
 **Ключевые преимущества:**
+
 - ✅ Человеческий масштаб (86 млрд нейронов) на одном SSD (512 ГБ)
 - ✅ Быстрый старт (загрузка через mmap за ~1 секунду)
 - ✅ Эффективное хранение (тратим память только на обученное)
@@ -91,15 +94,18 @@ C \frac{dV}{dt} = -g_L(V - E_L) + g_L \Delta_T \exp\left(\frac{V - V_T}{\Delta_T
 ```
 
 **Переменные состояния:**
+
 - `V` — мембранный потенциал (мВ)
 - `w` — адаптационный ток (нА)
 
 **Статические параметры:**
+
 - `threshold` — порог спайка (мВ)
 - `resting_potential` — потенциал покоя (мВ)
 - `neuron_type` — тип нейрона (пирамидальный, интернейрон и т.д.)
 
 **Событие спайка:**
+
 - Когда `V > threshold`, происходит спайк
 - `V` сбрасывается к `resting_potential`
 - `w` увеличивается на `b` (spike-triggered adaptation)
@@ -117,67 +123,68 @@ C \frac{dV}{dt} = -g_L(V - E_L) + g_L \Delta_T \exp\left(\frac{V - V_T}{\Delta_T
 
 ### Мембранный потенциал (V)
 
-**Диапазон:** -90 мВ до +40 мВ = 130 мВ  
-**Биологическая точность:** порог спайка меняется на ~10 мВ, шум ~0.1 мВ  
-**Квантование:** 12 бит → 4096 уровней  
-**Точность:** 130 / 4096 ≈ **0.03 мВ** (меньше теплового шума)  
+**Диапазон:** -90 мВ до +40 мВ = 130 мВ
+**Биологическая точность:** порог спайка меняется на ~10 мВ, шум ~0.1 мВ
+**Квантование:** 12 бит → 4096 уровней
+**Точность:** 130 / 4096 ≈ **0.03 мВ** (меньше теплового шума)
 **Экономия:** 32 бита (float32) → 12 бит = **сжатие 2.67×**
 
 ### Адаптационный ток (w)
 
-**Диапазон:** 0 до 10 нА  
-**Квантование:** 8 бит → 256 уровней  
-**Точность:** 10 / 256 ≈ **0.04 нА**  
+**Диапазон:** 0 до 10 нА
+**Квантование:** 8 бит → 256 уровней
+**Точность:** 10 / 256 ≈ **0.04 нА**
 **Экономия:** 32 бита → 8 бит = **сжатие 4×**
 
 ### Порог спайка (threshold)
 
-**Диапазон:** -60 до -40 мВ (медленно меняется, гомеостаз)  
-**Квантование:** 8 бит → 256 уровней  
-**Точность:** 20 / 256 ≈ **0.08 мВ**  
+**Диапазон:** -60 до -40 мВ (медленно меняется, гомеостаз)
+**Квантование:** 8 бит → 256 уровней
+**Точность:** 20 / 256 ≈ **0.08 мВ**
 **Экономия:** 32 бита → 8 бит = **сжатие 4×**
 
 ### Потенциал покоя (resting_potential)
 
-**Диапазон:** -75 до -55 мВ  
-**Квантование:** 8 бит → 256 уровней  
-**Точность:** 20 / 256 ≈ **0.08 мВ**  
+**Диапазон:** -75 до -55 мВ
+**Квантование:** 8 бит → 256 уровней
+**Точность:** 20 / 256 ≈ **0.08 мВ**
 **Экономия:** 32 бита → 8 бит = **сжатие 4×**
 
 ### Тип нейрона (neuron_type)
 
-**Варианты:** пирамидальный, интернейрон, клетка Пуркинье, зернистая клетка и т.д.  
-**Квантование:** 4 бита → 16 типов  
+**Варианты:** пирамидальный, интернейрон, клетка Пуркинье, зернистая клетка и т.д.
+**Квантование:** 4 бита → 16 типов
 **Экономия:** 32 бита → 4 бита = **сжатие 8×**
 
 ### Seed для PRNG
 
-**Назначение:** детерминированная генерация синапсов  
-**Диапазон:** 0 до 65535 (достаточно для уникальности)  
-**Размер:** 16 бит  
+**Назначение:** детерминированная генерация синапсов
+**Диапазон:** 0 до 65535 (достаточно для уникальности)
+**Размер:** 16 бит
 **Экономия:** vs хранение всех синапсов явно = **бесконечная**
 
 ### Cluster ID
 
-**Назначение:** идентификация кластера (микроколонки коры)  
-**Диапазон:** 0 до 65535 (65536 кластеров)  
+**Назначение:** идентификация кластера (микроколонки коры)
+**Диапазон:** 0 до 65535 (65536 кластеров)
 **Размер:** 16 бит
 
 ### Итоговая упаковка нейрона
 
-| Параметр | Биты | Байты |
-|----------|------|-------|
-| seed | 16 | 2.0 |
-| cluster_id | 16 | 2.0 |
-| type | 4 | 0.5 |
-| threshold | 8 | 1.0 |
-| resting_potential | 8 | 1.0 |
-| **Итого** | **52** | **6.5** |
+| Параметр          | Биты   | Байты   |
+| ----------------- | ------ | ------- |
+| seed              | 16     | 2.0     |
+| cluster_id        | 16     | 2.0     |
+| type              | 4      | 0.5     |
+| threshold         | 8      | 1.0     |
+| resting_potential | 8      | 1.0     |
+| **Итого**         | **52** | **6.5** |
 
 **С битовой упаковкой блоков:** 4.5 байта на нейрон (выравнивание до границ)
 
 **Для 86 млрд нейронов:**
-```
+
+```plaintext
 86 × 10⁹ × 4.5 байта = 387 ГБ
 ```
 
@@ -187,7 +194,7 @@ C \frac{dV}{dt} = -g_L(V - E_L) + g_L \Delta_T \exp\left(\frac{V - V_T}{\Delta_T
 
 ### Два слоя данных
 
-```
+```plaintext
 data/
 ├── memory/
 │   ├── base.mcog          # Процедурный слой (Read-Only, mmap)
@@ -231,7 +238,7 @@ data/
 
 ### Структура файла
 
-```
+```plaintext
 [Header] (64 байта)
 [Codebook] (256 × float32 = 1 КБ)
 [Section Table] (64 байта × N_sections)
@@ -267,6 +274,7 @@ type Codebook [256]float32
 Эталонные веса синапсов. Веса в base.mcog хранятся как индексы (8 бит) в этот codebook.
 
 **Генерация codebook:**
+
 ```go
 func GenerateCodebook() [256]float32 {
     var cb [256]float32
@@ -294,6 +302,7 @@ type NeuronParams struct {
 ```
 
 **Упаковка полей (bit-packing):**
+
 ```go
 // Types, Thresholds, RestingPots упакованы в один массив
 type PackedParams struct {
@@ -330,6 +339,7 @@ type ConnectivityRule struct {
 ```
 
 **Пример правил:**
+
 - Пирамидальные нейроны в одном кластере: P = 0.15
 - Пирамидальные → интернейроны: P = 0.08
 - Между далёкими кластерами: P = 0.001 (экспоненциальное затухание)
@@ -352,7 +362,7 @@ type ClusterMeta struct {
 
 ### Структура записи
 
-```
+```plaintext
 [Record Header] (8 байт)
   - type: uint8 (0=neurogenesis, 1=synaptogenesis, 2=weight_update, 3=delete)
   - timestamp: uint32 (тики с начала работы)
@@ -436,7 +446,8 @@ func CompressDeltaBlock(data []byte) []byte {
 **Коэффициент сжатия:** 3-5× (зависит от повторяемости данных)
 
 **Эффективный объём Delta:**
-```
+
+```plaintext
 120 ГБ × 4 (сжатие) = 480 ГБ эффективного хранилища
 480 ГБ / 16 байт = 30 млрд записей
 ```
@@ -456,9 +467,9 @@ type DeltaWriter struct {
 func (w *DeltaWriter) Write(record []byte) error {
     w.mu.Lock()
     defer w.mu.Unlock()
-    
+
     w.buffer = append(w.buffer, record...)
-    
+
     // Сбрасываем буфер при достижении 64 КБ
     if len(w.buffer) >= w.bufferSize {
         return w.flush()
@@ -480,27 +491,27 @@ func (w *DeltaWriter) flush() error {
 
 ### Бюджет: 512 ГБ SSD
 
-| Компонент | Размер | Комментарий |
-|-----------|--------|-------------|
-| base.mcog (нейроны) | 387 ГБ | 86 млрд × 4.5 байта |
-| base.mcog (правила) | 1 ГБ | Connectivity rules + clusters |
-| Codebook | 1 КБ | 256 × float32 |
-| delta.wal (сжатый) | 120 ГБ | ~30 млрд записей |
-| Метаданные | 1 ГБ | Индексы, статистика |
-| Резерв | 3 ГБ | Для ОС и временных файлов |
-| **Итого** | **512 ГБ** | ✅ Влезает с запасом |
+| Компонент           | Размер     | Комментарий                   |
+| ------------------- | ---------- | ----------------------------- |
+| base.mcog (нейроны) | 387 ГБ     | 86 млрд × 4.5 байта           |
+| base.mcog (правила) | 1 ГБ       | Connectivity rules + clusters |
+| Codebook            | 1 КБ       | 256 × float32                 |
+| delta.wal (сжатый)  | 120 ГБ     | ~30 млрд записей              |
+| Метаданные          | 1 ГБ       | Индексы, статистика           |
+| Резерв              | 3 ГБ       | Для ОС и временных файлов     |
+| **Итого**           | **512 ГБ** | ✅ Влезает с запасом          |
 
 ### RAM-потребление: 64 ГБ
 
-| Компонент | Стратегия | Потребление |
-|-----------|-----------|-------------|
-| base.mcog | mmap + OS page cache | 10-15 ГБ (горячие зоны) |
-| delta.wal | mmap + LZ4 декомпрессия | 5-8 ГБ (активные записи) |
-| Procedural Cache | LRU для сгенерированных синапсов | 4-6 ГБ |
-| Active Neuron State | Только для 5% активных нейронов | 3-5 ГБ |
-| Delta Index | RAM-индекс последних записей | 2-4 ГБ |
-| VirtualBox / Рендер / ОС | Резерв | 30-35 ГБ |
-| **Итого** | | **~50-60 ГБ** |
+| Компонент                | Стратегия                        | Потребление              |
+| ------------------------ | -------------------------------- | ------------------------ |
+| base.mcog                | mmap + OS page cache             | 10-15 ГБ (горячие зоны)  |
+| delta.wal                | mmap + LZ4 декомпрессия          | 5-8 ГБ (активные записи) |
+| Procedural Cache         | LRU для сгенерированных синапсов | 4-6 ГБ                   |
+| Active Neuron State      | Только для 5% активных нейронов  | 3-5 ГБ                   |
+| Delta Index              | RAM-индекс последних записей     | 2-4 ГБ                   |
+| VirtualBox / Рендер / ОС | Резерв                           | 30-35 ГБ                 |
+| **Итого**                |                                  | **~50-60 ГБ**            |
 
 **Вывод:** Стабильно влезает в 64 ГБ RAM без swap.
 
@@ -514,10 +525,10 @@ func (w *DeltaWriter) flush() error {
 func (m *MemorySystem) GetSynapses(neuronID uint32) []Synapse {
     // 1. Генерируем процедурные синапсы
     procedural := m.generateProceduralSynapses(neuronID)
-    
+
     // 2. Ищем модификации в Delta
     modifications := m.findDeltaModifications(neuronID)
-    
+
     // 3. Объединяем (Delta перекрывает Base)
     return m.mergeSynapses(procedural, modifications)
 }
@@ -529,26 +540,26 @@ func (m *MemorySystem) GetSynapses(neuronID uint32) []Synapse {
 func (m *MemorySystem) generateProceduralSynapses(neuronID uint32) []Synapse {
     seed := m.base.Neurons.Seeds[neuronID]
     clusterID := m.base.Neurons.ClusterIDs[neuronID]
-    
+
     // Детерминированный PRNG (PCG32)
     rng := NewPCG32(seed)
-    
+
     var synapses []Synapse
-    
+
     // Для каждого потенциального целевого кластера
     for _, targetCluster := range m.getConnectedClusters(clusterID) {
         // Получаем вероятность соединения
         probability := m.base.Rules.GetProbability(clusterID, targetCluster)
-        
+
         // Генерируем синапсы с этой вероятностью
         targetNeurons := m.base.Clusters[targetCluster].NeuronCount
         for i := uint32(0); i < targetNeurons; i++ {
             if rng.NextFloat32() < probability {
                 targetID := m.base.Clusters[targetCluster].FirstNeuronID + i
-                
+
                 // Генерируем вес процедурно
                 weightIdx := hashCombine(seed, targetID) % 256
-                
+
                 synapses = append(synapses, Synapse{
                     TargetID:  targetID,
                     WeightIdx: uint8(weightIdx),
@@ -558,7 +569,7 @@ func (m *MemorySystem) generateProceduralSynapses(neuronID uint32) []Synapse {
             }
         }
     }
-    
+
     return synapses
 }
 ```
@@ -568,12 +579,12 @@ func (m *MemorySystem) generateProceduralSynapses(neuronID uint32) []Synapse {
 ```go
 func (m *MemorySystem) findDeltaModifications(neuronID uint32) []DeltaRecord {
     var records []DeltaRecord
-    
+
     // Проверяем RAM-индекс (быстро)
     if idx, ok := m.deltaIndex[neuronID]; ok {
         records = append(records, idx.Records...)
     }
-    
+
     // Сканируем Delta-файл (медленно, но полно)
     m.deltaReader.Scan(func(record DeltaRecord) bool {
         if record.SourceID == neuronID {
@@ -581,7 +592,7 @@ func (m *MemorySystem) findDeltaModifications(neuronID uint32) []DeltaRecord {
         }
         return true
     })
-    
+
     return records
 }
 ```
@@ -592,12 +603,12 @@ func (m *MemorySystem) findDeltaModifications(neuronID uint32) []DeltaRecord {
 func (m *MemorySystem) mergeSynapses(procedural []Synapse, modifications []DeltaRecord) []Synapse {
     // Создаём карту для быстрого поиска
     synapseMap := make(map[uint32]Synapse)
-    
+
     // Добавляем процедурные синапсы
     for _, s := range procedural {
         synapseMap[s.TargetID] = s
     }
-    
+
     // Применяем модификации (Delta перекрывает Base)
     for _, mod := range modifications {
         switch mod.Type {
@@ -617,13 +628,13 @@ func (m *MemorySystem) mergeSynapses(procedural []Synapse, modifications []Delta
             delete(synapseMap, mod.TargetID)
         }
     }
-    
+
     // Конвертируем карту обратно в срез
     result := make([]Synapse, 0, len(synapseMap))
     for _, s := range synapseMap {
         result = append(result, s)
     }
-    
+
     return result
 }
 ```
@@ -642,7 +653,7 @@ func (m *MemorySystem) mergeSynapses(procedural []Synapse, modifications []Delta
 
 ### Структура проекта (Go)
 
-```
+```plaintext
 libs/
 ├── go/
 │   ├── cmd/
@@ -689,7 +700,7 @@ func Open(filename string, size int64) (*MMap, error) {
     if err != nil {
         return nil, err
     }
-    
+
     // Memory mapping
     data, err := syscall.Mmap(
         int(file.Fd()),
@@ -702,7 +713,7 @@ func Open(filename string, size int64) (*MMap, error) {
         file.Close()
         return nil, err
     }
-    
+
     return &MMap{data: data, file: file}, nil
 }
 
@@ -787,12 +798,12 @@ func NewMemorySystem(basePath, deltaPath string, workers int) *MemorySystem {
     ms := &MemorySystem{
         workerPool: make(chan func(), workers*2),
     }
-    
+
     // Запускаем worker pool
     for i := 0; i < workers; i++ {
         go ms.worker()
     }
-    
+
     return ms
 }
 
@@ -807,19 +818,19 @@ func (ms *MemorySystem) GetSynapsesBatch(neuronIDs []uint32) map[uint32][]Synaps
     results := make(map[uint32][]Synapse)
     var wg sync.WaitGroup
     var mu sync.Mutex
-    
+
     for _, id := range neuronIDs {
         wg.Add(1)
         ms.workerPool <- func() {
             defer wg.Done()
             synapses := ms.GetSynapses(id)
-            
+
             mu.Lock()
             results[id] = synapses
             mu.Unlock()
         }
     }
-    
+
     wg.Wait()
     return results
 }
@@ -840,31 +851,31 @@ import "unsafe"
 func Compress(src []byte) []byte {
     maxDstSize := C.LZ4_compressBound(C.int(len(src)))
     dst := make([]byte, maxDstSize)
-    
+
     compressedSize := C.LZ4_compress_default(
         (*C.char)(unsafe.Pointer(&src[0])),
         (*C.char)(unsafe.Pointer(&dst[0])),
         C.int(len(src)),
         maxDstSize,
     )
-    
+
     return dst[:compressedSize]
 }
 
 func Decompress(src []byte, dstSize int) []byte {
     dst := make([]byte, dstSize)
-    
+
     decompressedSize := C.LZ4_decompress_safe(
         (*C.char)(unsafe.Pointer(&src[0])),
         (*C.char)(unsafe.Pointer(&dst[0])),
         C.int(len(src)),
         C.int(dstSize),
     )
-    
+
     if decompressedSize < 0 {
         return nil // Ошибка декомпрессии
     }
-    
+
     return dst[:decompressedSize]
 }
 ```
@@ -921,45 +932,45 @@ package main
 import (
     "log"
     "runtime"
-    
+
     "github.com/Major-Woolfi/Project_Mira/libs/go/internal/memory"
 )
 
 func main() {
     // Устанавливаем количество потоков = количество ядер CPU
     runtime.GOMAXPROCS(runtime.NumCPU())
-    
+
     // Инициализируем систему памяти
     ms := memory.NewMemorySystem(
         "data/memory/base.mcog",
         "data/memory/delta.wal",
         runtime.NumCPU(), // Worker pool
     )
-    
+
     // Открываем файлы
     if err := ms.Open(); err != nil {
         log.Fatal(err)
     }
     defer ms.Close()
-    
+
     // Запускаем event loop
     ms.StartEventLoop()
-    
+
     // Запускаем compaction в фоне
     go ms.RunCompactionLoop()
-    
+
     // Основной цикл работы Миры
     for {
         // Читаем синапсы для активных нейронов
         activeNeurons := ms.GetActiveNeurons()
         synapses := ms.GetSynapsesBatch(activeNeurons)
-        
+
         // Обрабатываем спайки
         spikes := ms.SimulateStep(synapses)
-        
+
         // Применяем STDP
         ms.ApplySTDP(spikes)
-        
+
         // Логируем статистику
         ms.LogStats()
     }
@@ -992,11 +1003,11 @@ func (ms *MemorySystem) GetNeuron(id uint32) Neuron {
     typePacked := ms.base.GetType(id)
     thresholdPacked := ms.base.GetThreshold(id)
     restingPacked := ms.base.GetRestingPotential(id)
-    
+
     // Декодируем квантованные значения
     threshold := decodeThreshold(thresholdPacked)
     resting := decodeRestingPotential(restingPacked)
-    
+
     return Neuron{
         ID:               id,
         Seed:             seed,
@@ -1029,25 +1040,25 @@ func (ms *MemorySystem) SimulateStep(synapses map[uint32][]Synapse) []Spike {
     var spikes []Spike
     var mu sync.Mutex
     var wg sync.WaitGroup
-    
+
     // Параллельно обрабатываем каждый нейрон
     for neuronID, neuronSynapses := range synapses {
         wg.Add(1)
         go func(id uint32, syns []Synapse) {
             defer wg.Done()
-            
+
             // Получаем текущее состояние нейрона
             V, w := ms.GetNeuronState(id)
-            
+
             // Вычисляем входной ток
             I := ms.computeInputCurrent(id, syns)
-            
+
             // Интегрируем AdEx (один шаг Эйлера, dt = 1 мс)
             V_new, w_new, spiked := ms.integrateAdEx(V, w, I, 1.0)
-            
+
             // Обновляем состояние
             ms.SetNeuronState(id, V_new, w_new)
-            
+
             // Если был спайк, добавляем в список
             if spiked {
                 mu.Lock()
@@ -1059,7 +1070,7 @@ func (ms *MemorySystem) SimulateStep(synapses map[uint32][]Synapse) []Spike {
             }
         }(neuronID, neuronSynapses)
     }
-    
+
     wg.Wait()
     return spikes
 }
@@ -1076,19 +1087,19 @@ func (ms *MemorySystem) integrateAdEx(V, w, I, dt float32) (float32, float32, bo
         a      = 4.0    // нС
         b      = 0.0805 // нА
     )
-    
+
     neuron := ms.GetNeuron(neuronID)
     threshold := neuron.Threshold
-    
+
     // Уравнение для V
     dV := (-gL*(V-EL) + gL*deltaT*float32(math.Exp(float64((V-VT)/deltaT))) - w + I) / C * dt
-    
+
     // Уравнение для w
     dw := (a*(V-EL) - w) / tauW * dt
-    
+
     V_new := V + dV
     w_new := w + dw
-    
+
     // Проверка спайка
     if V_new > threshold {
         // Сброс после спайка
@@ -1096,7 +1107,7 @@ func (ms *MemorySystem) integrateAdEx(V, w, I, dt float32) (float32, float32, bo
         w_new += b
         return V_new, w_new, true
     }
-    
+
     return V_new, w_new, false
 }
 ```
@@ -1108,6 +1119,7 @@ func (ms *MemorySystem) integrateAdEx(V, w, I, dt float32) (float32, float32, bo
 ### 1. Cache-friendly доступ (SoA)
 
 Вместо AoS (Array of Structures):
+
 ```go
 // ПЛОХО: каждый нейрон = отдельная структура
 type NeuronAoS struct {
@@ -1120,6 +1132,7 @@ neurons := []NeuronAoS{...}
 ```
 
 Используем SoA (Structure of Arrays):
+
 ```go
 // ХОРОШО: все seeds подряд, все clusterIDs подряд
 type NeuronSoA struct {
@@ -1165,17 +1178,17 @@ TEXT ·updatePotentialsAVX2(SB), NOSPLIT, $0
     MOVQ potentials+0(FP), SI
     MOVQ currents+24(FP), DX
     MOVQ dt+48(FP), X0
-    
+
     // Загружаем 8 потенциалов в YMM0
     VMOVUPS (SI), Y0
-    
+
     // Загружаем 8 токов в YMM1
     VMOVUPS (DX), Y1
-    
+
     // V = V + I * dt
     VMULPS Y1, X0, Y1
     VADDPS Y1, Y0, Y0
-    
+
     // Сохраняем обратно
     VMOVUPS Y0, (SI)
     RET
@@ -1190,10 +1203,10 @@ TEXT ·updatePotentialsAVX2(SB), NOSPLIT, $0
 func (ms *MemorySystem) GetSynapsesUnsafe(neuronID uint32) []Synapse {
     offset := ms.base.GetSynapseOffset(neuronID)
     count := ms.base.GetSynapseCount(neuronID)
-    
+
     // Получаем указатель на данные в mmap
     ptr := unsafe.Pointer(&ms.base.data[offset])
-    
+
     // Создаём срез без копирования
     return (*[1 << 20]Synapse)(ptr)[:count:count]
 }
@@ -1213,7 +1226,7 @@ type SpikeBatch struct {
 func (ms *MemorySystem) ProcessSpikeBatch(batch SpikeBatch) {
     // Параллельно обновляем веса для всех спайков
     var wg sync.WaitGroup
-    
+
     for _, id := range batch.NeuronIDs {
         wg.Add(1)
         go func(neuronID uint32) {
@@ -1221,7 +1234,7 @@ func (ms *MemorySystem) ProcessSpikeBatch(batch SpikeBatch) {
             ms.applySTDPForNeuron(neuronID, batch.Timestamp)
         }(id)
     }
-    
+
     wg.Wait()
 }
 ```
@@ -1272,6 +1285,7 @@ func (ms *MemorySystem) ProcessSpikeBatch(batch SpikeBatch) {
 ### Hot Set (горячие данные)
 
 В RAM всегда держим:
+
 1. **CSR-указатели** (`row_ptr`) — 8 ГБ для 1 млрд нейронов
 2. **Активные состояния нейронов** (V, w) — 3-5 ГБ (только для 5% активных)
 3. **Delta-индекс** — 2-4 ГБ (последние 1000 записей)
@@ -1282,6 +1296,7 @@ func (ms *MemorySystem) ProcessSpikeBatch(batch SpikeBatch) {
 ### Warm Set (тёплые данные)
 
 Подгружаются через mmap + OS page cache:
+
 1. **Base параметры нейронов** — подгружаются по мере обращения
 2. **Delta-записи** — декомпрессируются LZ4 при чтении
 3. **Connectivity Rules** — кэшируются при первом использовании
@@ -1291,6 +1306,7 @@ func (ms *MemorySystem) ProcessSpikeBatch(batch SpikeBatch) {
 ### Cold Set (холодные данные)
 
 Остаются на SSD, подгружаются только при обращении:
+
 1. **Неиспользуемые зоны коры** — выгружаются OS при нехватке RAM
 2. **Старые Delta-записи** — ждут compaction
 3. **Процедурные синапсы** — генерируются заново при обращении (экономия RAM)
@@ -1321,20 +1337,20 @@ type CacheItem struct {
 func (c *LRUCache) Evict(bytesNeeded int) {
     c.mu.Lock()
     defer c.mu.Unlock()
-    
+
     freed := 0
     for freed < bytesNeeded && c.order.Len() > 0 {
         // Берём элемент из хвоста (самый старый)
         elem := c.order.Back()
         item := elem.Value.(*CacheItem)
-        
+
         // Не вытесняем "горячие" элементы (много обращений)
         if item.AccessCnt > 100 && time.Since(item.LastUsed) < time.Minute {
             // Перемещаем в начало, пропускаем
             c.order.MoveToFront(elem)
             continue
         }
-        
+
         freed += item.Size
         delete(c.items, item.Key)
         c.order.Remove(elem)
@@ -1343,6 +1359,7 @@ func (c *LRUCache) Evict(bytesNeeded int) {
 ```
 
 **Приоритет вытеснения:**
+
 1. 🔴 **Холодное и старое** — вытесняется первым
 2. 🟡 **Холодное, но частое** — вытесняется вторым
 3. 🟢 **Горячее** — остаётся в RAM
@@ -1363,27 +1380,27 @@ var (
         Name: "mira_neurons_total",
         Help: "Общее количество нейронов в системе",
     })
-    
+
     synapsesGenerated = prometheus.NewCounter(prometheus.CounterOpts{
         Name: "mira_synapses_generated_total",
         Help: "Количество процедурно сгенерированных синапсов",
     })
-    
+
     deltaRecordsWritten = prometheus.NewCounter(prometheus.CounterOpts{
         Name: "mira_delta_records_written_total",
         Help: "Количество записей в Delta-лог",
     })
-    
+
     cacheHitRatio = prometheus.NewGauge(prometheus.GaugeOpts{
         Name: "mira_cache_hit_ratio",
         Help: "Процент попаданий в procedural cache",
     })
-    
+
     mmapPageFaults = prometheus.NewCounter(prometheus.CounterOpts{
         Name: "mira_mmap_page_faults_total",
         Help: "Количество page faults при mmap-доступе",
     })
-    
+
     compactionDuration = prometheus.NewHistogram(prometheus.HistogramOpts{
         Name:    "mira_compaction_duration_seconds",
         Help:    "Время выполнения compaction",
@@ -1416,7 +1433,7 @@ func (ms *MemorySystem) NeuronHandler(w http.ResponseWriter, r *http.Request) {
     id := parseIDFromURL(r)
     neuron := ms.GetNeuron(id)
     synapses := ms.GetSynapses(id)
-    
+
     response := map[string]interface{}{
         "neuron":         neuron,
         "synapses_count": len(synapses),
@@ -1445,7 +1462,7 @@ func main() {
     go func() {
         log.Println(http.ListenAndServe("localhost:6060", nil))
     }()
-    
+
     // Теперь доступно:
     // http://localhost:6060/debug/pprof/heap     — использование памяти
     // http://localhost:6060/debug/pprof/profile  — CPU профиль
@@ -1455,6 +1472,7 @@ func main() {
 ```
 
 **Полезные команды:**
+
 ```bash
 # Анализ использования памяти
 go tool pprof http://localhost:6060/debug/pprof/heap
@@ -1515,11 +1533,11 @@ func (m *Migrator) MigrateIfNeeded(basePath string) error {
     header := readHeader(basePath)
     current := FormatVersion{header.Major, header.Minor, header.Patch}
     target := CurrentVersion
-    
+
     if current == target {
         return nil // Ничего делать не нужно
     }
-    
+
     // Применяем миграции по цепочке
     for _, mig := range m.migrations {
         if mig.From() == current {
@@ -1532,49 +1550,54 @@ func (m *Migrator) MigrateIfNeeded(basePath string) error {
             }
         }
     }
-    
+
     return nil
 }
 ```
 
 ### История версий
 
-| Версия | Дата | Изменения |
-|--------|------|-----------|
-| 0.1.0 | 2026-08 | Первая версия: простой CSR в .bin |
-| 0.2.0 | 2026-09 | Добавлена таблица разделов |
-| 0.3.0 | 2026-10 | SoA формат, квантование параметров |
-| 1.0.0 | 2026-12 | Процедурная связность + Delta WAL (текущая) |
+| Версия | Дата    | Изменения                                   |
+| ------ | ------- | ------------------------------------------- |
+| 0.1.0  | 2026-08 | Первая версия: простой CSR в .bin           |
+| 0.2.0  | 2026-09 | Добавлена таблица разделов                  |
+| 0.3.0  | 2026-10 | SoA формат, квантование параметров          |
+| 1.0.0  | 2026-12 | Процедурная связность + Delta WAL (текущая) |
 
 ---
 
 ## 📋 Чек-лист внедрения
 
 ### Этап 1: Базовая структура (v0.2)
+
 - [ ] Создать `base.mcog` с Header и Codebook
 - [ ] Реализовать mmap-обёртку на Go
 - [ ] Написать bit-packing для NeuronParams
 - [ ] Интегрировать PCG32 PRNG
 
 ### Этап 2: Процедурная связность (v0.3)
+
 - [ ] Определить Connectivity Rules (биологические вероятности)
 - [ ] Реализовать Cluster Metadata
 - [ ] Написать `generateProceduralSynapses()`
 - [ ] Создать unit-тесты для детерминированности PRNG
 
 ### Этап 3: Delta-лог (v0.4)
+
 - [ ] Реализовать Append-Only WAL
 - [ ] Интегрировать LZ4 через cgo
 - [ ] Написать буферизованную запись (64 КБ блоки)
 - [ ] Создать RAM-индекс для быстрого поиска
 
 ### Этап 4: Интеграция (v0.5)
+
 - [ ] Связать Go-модуль с Python через cgo (или FFI)
 - [ ] Реализовать `GetSynapses()` с объединением Base + Delta
 - [ ] Написать фоновый compaction
 - [ ] Интегрировать с Core AI
 
 ### Этап 5: Оптимизация (v0.6+)
+
 - [ ] Добавить LRU-кэш для процедурных синапсов
 - [ ] Реализовать SIMD (AVX2) для AdEx-интеграции
 - [ ] Настроить pprof и Prometheus-метрики
@@ -1586,13 +1609,14 @@ func (m *Migrator) MigrateIfNeeded(basePath string) error {
 
 Архитектура памяти проекта "Мира" v3 — это **прорыв в хранении биологических нейросетей**. Мы смогли:
 
-✅ **Уместить 86 млрд нейронов и 130 трлн синапсов в 512 ГБ SSD**  
-✅ **Работать в 64 ГБ RAM** благодаря mmap + OS page cache  
-✅ **Поддерживать динамический нейрогенез** без пересборки файлов  
-✅ **Использовать Go** для производительности и безопасности памяти  
-✅ **Сохранить биологическую правдоподобность** через AdEx и процедурные правила  
+✅ **Уместить 86 млрд нейронов и 130 трлн синапсов в 512 ГБ SSD**
+✅ **Работать в 64 ГБ RAM** благодаря mmap + OS page cache
+✅ **Поддерживать динамический нейрогенез** без пересборки файлов
+✅ **Использовать Go** для производительности и безопасности памяти
+✅ **Сохранить биологическую правдоподобность** через AdEx и процедурные правила
 
 Ключевая инновация — разделение на **природу (Nature)** и **опыт (Nurture)**:
+
 - **Nature** хранится как детерминированные правила (seed + PRNG)
 - **Nurture** хранится как sparse modifications в Delta-логе
 

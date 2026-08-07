@@ -1,0 +1,7 @@
+{
+    "name": "addons_mod",
+    "description": "Базовый мод, обеспечивающий возможность добавления модификаций и расширений для VirtualBox через папку addons/",
+    "author": "Майор Вулфи",
+    "version": "1.0.0",
+    "dependencies": [ ]
+}
