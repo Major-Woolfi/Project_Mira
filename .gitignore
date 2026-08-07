@@ -1,5 +1,15 @@
 __pycache__/
-data/
 logs/
-unit_tests/results/
 .env
+
+/DATA/
+/MIRA/UNIT-TESTS/results/
+
+/WEB/.next/
+/WEB/node_modules/
+/WEB/next-env.d.ts
+/WEB/tsconfig.tsbuildinfo
+
+
+/MIRA/
+/WEB/
