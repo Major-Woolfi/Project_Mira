@@ -2,8 +2,9 @@ __pycache__/
 logs/
 .env
 
-/DATA/
-/MIRA/UNIT-TESTS/results/
+/DATA/*
+/MIRA/libs/build/*
+/MIRA/UNIT-TESTS/results/*
 
 /WEB/.next/
 /WEB/node_modules/
@@ -11,4 +12,4 @@ logs/
 /WEB/tsconfig.tsbuildinfo
 
 
-/WEB/
+/WEB/*

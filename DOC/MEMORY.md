@@ -498,8 +498,8 @@ func (w *DeltaWriter) flush() error {
 | Codebook            | 1 КБ       | 256 × float32                 |
 | delta.wal (сжатый)  | 120 ГБ     | ~30 млрд записей              |
 | Метаданные          | 1 ГБ       | Индексы, статистика           |
-| Резерв              | 3 ГБ       | Для ОС и временных файлов     |
-| **Итого**           | **512 ГБ** | ✅ Влезает с запасом          |
+| Резерв              | 3 ГБ       | Для временных файлов          |
+| **Итого**           | **512 ГБ** | ✅ Влезает с запасом           |
 
 ### RAM-потребление: 64 ГБ
 
@@ -648,36 +648,54 @@ func (m *MemorySystem) mergeSynapses(procedural []Synapse, modifications []Delta
 1. **Нативная компиляция** — быстрее Python, сравнимо с C++
 2. **Goroutines** — отличная поддержка concurrency для параллельной работы с mmap
 3. **Memory safety** — без segfaults, но с `unsafe` для низкоуровневого доступа
-4. **Простой FFI** через cgo — интеграция с C-библиотеками (LZ4)
+4. **Чистый Go** — без cgo, кроссплатформенность (Windows/Linux/macOS)
 5. **Встроенные инструменты** — профилирование, бенчмарки, race detector
 
 ### Структура проекта (Go)
 
 ```plaintext
 libs/
-├── go/
-│   ├── cmd/
-│   │   └── mira-memory/
-│   │       └── main.go          # Точка входа
-│   ├── internal/
-│   │   ├── memory/
-│   │   │   ├── base.go          # Работа с base.mcog
-│   │   │   ├── delta.go         # Работа с delta.wal
-│   │   │   ├── procedural.go    # Процедурная генерация
-│   │   │   ├── compaction.go    # Фоновое слияние
-│   │   │   └── types.go         # Типы данных
-│   │   ├── mmap/
-│   │   │   └── mmap.go          # Обёртка над syscall.Mmap
-│   │   ├── prng/
-│   │   │   └── pcg32.go         # Детерминированный PRNG
-│   │   └── lz4/
-│   │       └── lz4.go           # Сжатие через cgo
-│   ├── pkg/
-│   │   └── api/
-│   │       └── api.go           # Публичный API для Python
-│   ├── go.mod
-│   ├── go.sum
-│   └── Makefile
+├── src/
+│   └── engine-memory-go/
+│       ├── cmd/
+│       │   └── mira-memory/
+│       │       └── main.go          # Точка входа (HTTP + CLI)
+│       ├── internal/
+│       │   ├── memory/
+│       │   │   ├── base.go          # Работа с base.mcog
+│       │   │   ├── delta.go         # Запись delta.wal
+│       │   │   ├── delta_reader.go  # Чтение и индекс delta.wal
+│       │   │   ├── procedural.go    # Процедурная генерация синапсов
+│       │   │   ├── compaction.go    # Фоновое слияние
+│       │   │   ├── lru.go           # LRU-кэш синапсов
+│       │   │   └── types.go         # Типы данных
+│       │   ├── mmap/
+│       │   │   ├── mmap.go          # POSIX mmap
+│       │   │   └── mmap_windows.go  # Windows mmap
+│       │   ├── prng/
+│       │   │   └── pcg32.go         # Детерминированный PRNG
+│       │   └── lz4/
+│       │       └── lz4.go           # Чистый Go LZ4 (pierrec/lz4/v4)
+│       ├── pkg/
+│       │   └── api/
+│       │       └── api.go           # HTTP API + Prometheus
+│       ├── go.mod
+│       ├── Makefile
+│       └── README.md
+├── scripts/
+│   ├── bat/
+│   │   ├── go_build.bat
+│   │   ├── python_build.bat
+│   │   └── cython_build.bat
+│   └── sh/
+│       ├── go_build.sh
+│       ├── python_build.sh
+│       └── cython_build.sh
+└── build/
+    └── engine-memory-go/
+        ├── engine-memory-go.exe
+        ├── go.mod
+        └── go.sum
 ```
 
 ### Работа с mmap
@@ -836,47 +854,30 @@ func (ms *MemorySystem) GetSynapsesBatch(neuronIDs []uint32) map[uint32][]Synaps
 }
 ```
 
-### LZ4 через cgo
+### LZ4 (чистый Go)
 
 ```go
 package lz4
 
-/*
-#cgo LDFLAGS: -llz4
-#include <lz4.h>
-*/
-import "C"
-import "unsafe"
+import (
+    "bytes"
+
+    "github.com/pierrec/lz4/v4"
+)
 
 func Compress(src []byte) []byte {
-    maxDstSize := C.LZ4_compressBound(C.int(len(src)))
-    dst := make([]byte, maxDstSize)
-
-    compressedSize := C.LZ4_compress_default(
-        (*C.char)(unsafe.Pointer(&src[0])),
-        (*C.char)(unsafe.Pointer(&dst[0])),
-        C.int(len(src)),
-        maxDstSize,
-    )
-
-    return dst[:compressedSize]
+    var buf bytes.Buffer
+    writer := lz4.NewWriter(&buf)
+    writer.Write(src)
+    writer.Close()
+    return buf.Bytes()
 }
 
 func Decompress(src []byte, dstSize int) []byte {
     dst := make([]byte, dstSize)
-
-    decompressedSize := C.LZ4_decompress_safe(
-        (*C.char)(unsafe.Pointer(&src[0])),
-        (*C.char)(unsafe.Pointer(&dst[0])),
-        C.int(len(src)),
-        C.int(dstSize),
-    )
-
-    if decompressedSize < 0 {
-        return nil // Ошибка декомпрессии
-    }
-
-    return dst[:decompressedSize]
+    reader := lz4.NewReader(bytes.NewReader(src))
+    reader.Read(dst)
+    return dst
 }
 ```
 
@@ -922,6 +923,120 @@ func (ms *MemorySystem) handleEvent(event Event) {
 
 ---
 
+## 🔨 Система сборки
+
+### Общая концепция
+
+Все библиотеки живут в `libs/src/<package-name>/`. Сборка централизована через скрипты в `libs/scripts/` и складывает артефакты в `libs/build/<package-name>/`.
+
+```plaintext
+libs/
+├── src/
+│   ├── engine-memory-go/      # Go пакет
+│   ├── engine-memory-py/      # Python пакет (будущий)
+│   └── engine-memory-cython/  # Cython пакет (будущий)
+├── scripts/
+│   ├── bat/                   # Windows-хелперы
+│   │   ├── go_build.bat
+│   │   ├── python_build.bat
+│   │   └── cython_build.bat
+│   └── sh/                    # Linux/macOS-хелперы
+│       ├── go_build.sh
+│       ├── python_build.sh
+│       └── cython_build.sh
+└── build/
+    └── engine-memory-go/      # Артефакты после сборки
+        ├── engine-memory-go.exe
+        ├── go.mod
+        └── go.sum
+```
+
+### Быстрый старт
+
+**Windows:**
+
+```cmd
+libs\build.bat
+```
+
+**Linux / macOS:**
+
+```bash
+chmod +x libs/build.sh
+libs/build.sh
+```
+
+### Поддерживаемые типы пакетов
+
+| Тип    | Маркер           | Результат                    | Зависимости             |
+| ------ | ---------------- | ---------------------------- | ----------------------- |
+| Go     | `go.mod`         | `.exe` / бинарник + `go.mod` | Go toolchain            |
+| Python | `pyproject.toml` | `.whl` wheel-файл            | Python, `pip`, `build`  |
+| Cython | `setup.py`       | `.whl` + `.pyd`/`.so`        | Python, `cython`, `pip` |
+
+### Логика определения
+
+1. Если есть `go.mod` → **Go-пакет**
+2. Иначе если есть `pyproject.toml` → **Python-пакет**
+3. Иначе если есть `setup.py` → **Cython-пакет**
+4. Иначе → пропуск
+
+---
+
+## 🐍 Интеграция с Python
+
+### Почему `.exe` нельзя импортировать напрямую
+
+Go компилирует в нативный исполняемый файл (`engine-memory-go.exe`), а не в Python-модуль (`.pyd`/`.so`). Поэтому интеграция идёт через **внешний процесс** или **HTTP API**.
+
+### Вариант 1: CLI / subprocess
+
+```python
+import subprocess
+import json
+
+MIRA_BIN = "libs/build/engine-memory-go/engine-memory-go.exe"
+
+result = subprocess.run(
+    [MIRA_BIN, "stats"],
+    capture_output=True,
+    text=True,
+)
+
+stats = json.loads(result.stdout)
+print(f"Neurons: {stats['neurons_total']}")
+```
+
+### Вариант 2: HTTP API (встроенный сервер)
+
+```python
+import requests
+
+BASE_URL = "http://localhost:8080"
+
+# Статистика
+stats = requests.get(f"{BASE_URL}/stats").json()
+
+# Данные нейрона
+neuron_id = 12345
+neuron = requests.get(f"{BASE_URL}/neuron/{neuron_id}").json()
+
+# Запуск compaction
+requests.post(f"{BASE_URL}/compact")
+```
+
+Запуск сервера:
+
+```cmd
+libs\build\engine-memory-go\engine-memory-go.exe --http :8080
+```
+
+### Вариант 3: gRPC / JSON-RPC (перспектива)
+
+Для низко-латентных вызовов из Python можно добавить gRPC-интерфейс в Go-сервис и генерировать Python-стаб через `grpcio-tools`.
+
+---
+
 ## 💻 Примеры кода
 
 ### Инициализация системы памяти
@@ -933,7 +1048,7 @@ import (
     "log"
     "runtime"
 
-    "github.com/Major-Woolfi/Project_Mira/libs/go/internal/memory"
+    "github.com/Major-Woolfi/Project_Mira/libs/src/engine-memory-go/internal/memory"
 )
 
 func main() {
@@ -1584,21 +1699,29 @@ func (m *Migrator) MigrateIfNeeded(basePath string) error {
 
 ### Этап 3: Delta-лог (v0.4)
 
-- [ ] Реализовать Append-Only WAL
-- [ ] Интегрировать LZ4 через cgo
-- [ ] Написать буферизованную запись (64 КБ блоки)
+- [x] Реализовать Append-Only WAL
+- [x] Интегрировать LZ4 через чистый Go (`pierrec/lz4/v4`)
+- [x] Написать буферизованную запись (64 КБ блоки)
 - [ ] Создать RAM-индекс для быстрого поиска
 
 ### Этап 4: Интеграция (v0.5)
 
-- [ ] Связать Go-модуль с Python через cgo (или FFI)
-- [ ] Реализовать `GetSynapses()` с объединением Base + Delta
+- [x] Собрать Go-модуль в `libs/build/engine-memory-go/`
+- [x] Добавить HTTP API для Python (`pkg/api/api.go`)
+- [x] Реализовать `GetSynapses()` с объединением Base + Delta
 - [ ] Написать фоновый compaction
 - [ ] Интегрировать с Core AI
 
-### Этап 5: Оптимизация (v0.6+)
+### Этап 5: Сборка и DevOps (v0.5)
 
-- [ ] Добавить LRU-кэш для процедурных синапсов
+- [x] Создать `libs/build.bat` / `libs/build.sh`
+- [x] Добавить вспомогательные скрипты для Go, Python, Cython
+- [x] Настроить вывод артефактов в `libs/build/<package>/`
+- [ ] Добавить CI/CD пайплайн для автоматической сборки
+
+### Этап 6: Оптимизация (v0.6+)
+
+- [x] Добавить LRU-кэш для процедурных синапсов
 - [ ] Реализовать SIMD (AVX2) для AdEx-интеграции
 - [ ] Настроить pprof и Prometheus-метрики
 - [ ] Провести нагрузочное тестирование
