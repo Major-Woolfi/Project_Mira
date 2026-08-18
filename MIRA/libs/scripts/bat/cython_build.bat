@@ -43,5 +43,16 @@ if exist "*.pyd" (
     copy /Y *.pyd "%ARTIFACT_DIR%\" >nul
 )
 
+echo [CYTHON] Copying Go shared library...
+if exist "..\build\engine-memory-go\mira_memory.dll" (
+    copy /Y "..\build\engine-memory-go\mira_memory.dll" "%ARTIFACT_DIR%\" >nul
+)
+if exist "..\build\engine-memory-go\mira_memory.lib" (
+    copy /Y "..\build\engine-memory-go\mira_memory.lib" "%ARTIFACT_DIR%\" >nul
+)
+if exist "..\build\engine-memory-go\mira_memory.h" (
+    copy /Y "..\build\engine-memory-go\mira_memory.h" "%ARTIFACT_DIR%\" >nul
+)
+
 popd
 endlocal

@@ -12,35 +12,36 @@ set "PYTHON=python"
 
 echo Scanning "%SRC_DIR%" for packages...
 
-for /d %%p in ("%SRC_DIR%\*") do (
-    set "PKG_DIR=%%p"
-    set "PKG_NAME=%%~nxp"
-    echo.
-    echo ========================================
-    echo Processing: !PKG_NAME!
-    echo ========================================
+for /f "delims=" %%p in ('dir /b /ad "%SRC_DIR%"') do (
+    set "PKG_DIR=%SRC_DIR%\%%p"
+    set "PKG_NAME=%%p"
 
     if exist "!PKG_DIR!\go.mod" (
-        echo Detected: Go package
+        echo.
+        echo ========================================
+        echo Processing Go: !PKG_NAME!
+        echo ========================================
         call "%LIBS_DIR%scripts\bat\go_build.bat" "!PKG_DIR!" "%BUILD_DIR%" "%GO_PATH%"
-        goto :continue
     )
+)
 
-    if exist "!PKG_DIR!\pyproject.toml" (
-        echo Detected: Python package (pyproject.toml)
-        call "%LIBS_DIR%scripts\bat\python_build.bat" "!PKG_DIR!" "%BUILD_DIR!" "%PYTHON%"
-        goto :continue
-    )
+for /f "delims=" %%p in ('dir /b /ad "%SRC_DIR%"') do (
+    set "PKG_DIR=%SRC_DIR%\%%p"
+    set "PKG_NAME=%%p"
 
     if exist "!PKG_DIR!\setup.py" (
-        echo Detected: Cython package (setup.py)
-        call "%LIBS_DIR%scripts\bat\cython_build.bat" "!PKG_DIR!" "%BUILD_DIR!" "%PYTHON%"
-        goto :continue
+        echo.
+        echo ========================================
+        echo Processing Cython: !PKG_NAME!
+        echo ========================================
+        call "%LIBS_DIR%scripts\bat\cython_build.bat" "!PKG_DIR!" "%BUILD_DIR%" "%PYTHON%"
+    ) else if exist "!PKG_DIR!\pyproject.toml" (
+        echo.
+        echo ========================================
+        echo Processing Python: !PKG_NAME!
+        echo ========================================
+        call "%LIBS_DIR%scripts\bat\python_build.bat" "!PKG_DIR!" "%BUILD_DIR%" "%PYTHON%"
     )
-
-    echo Skipping !PKG_NAME! - unknown package type
-
-:continue
 )
 
 echo.

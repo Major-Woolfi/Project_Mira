@@ -37,3 +37,8 @@ if [ -d "dist" ]; then
 fi
 
 cp -f *.so "$ARTIFACT_DIR/" 2>/dev/null || true
+
+echo "[CYTHON] Copying Go shared library..."
+cp -f ../build/engine-memory-go/libmira_memory.so "$ARTIFACT_DIR/" 2>/dev/null || true
+cp -f ../build/engine-memory-go/libmira_memory.dylib "$ARTIFACT_DIR/" 2>/dev/null || true
+cp -f ../build/engine-memory-go/mira_memory.h "$ARTIFACT_DIR/" 2>/dev/null || true

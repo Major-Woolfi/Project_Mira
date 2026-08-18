@@ -9,25 +9,29 @@ import (
 )
 
 type MemorySystem struct {
-	base            *BaseReader
-	delta           *DeltaReader
-	cache           *LRUCache
-	mu              sync.RWMutex
-	workerPool      chan func()
-	eventChan       chan Event
-	done            chan struct{}
-	currentTime     uint64
-	neuronStates    map[uint32]struct{ V, w float32 }
-	lastCompaction  time.Time
-	activeNeurons   []uint32
+	basePath       string
+	deltaPath      string
+	base           *BaseReader
+	delta          *DeltaReader
+	cache          *LRUCache
+	mu             sync.RWMutex
+	workerPool     chan func()
+	eventChan      chan Event
+	done           chan struct{}
+	currentTime    uint64
+	neuronStates   map[uint32]struct{ V, w float32 }
+	lastCompaction time.Time
+	activeNeurons  []uint32
 }
 
 func NewMemorySystem(basePath, deltaPath string, workers int) *MemorySystem {
 	ms := &MemorySystem{
-		workerPool:   make(chan func(), workers*2),
-		eventChan:    make(chan Event, 1024),
-		done:         make(chan struct{}),
-		neuronStates: make(map[uint32]struct{ V, w float32 }),
+		basePath:      basePath,
+		deltaPath:     deltaPath,
+		workerPool:    make(chan func(), workers*2),
+		eventChan:     make(chan Event, 1024),
+		done:          make(chan struct{}),
+		neuronStates:  make(map[uint32]struct{ V, w float32 }),
 	}
 
 	for i := 0; i < workers; i++ {
@@ -38,13 +42,13 @@ func NewMemorySystem(basePath, deltaPath string, workers int) *MemorySystem {
 }
 
 func (ms *MemorySystem) Open() error {
-	base, err := NewBaseReader("data/memory/base.mcog")
+	base, err := NewBaseReader(ms.basePath)
 	if err != nil {
 		return err
 	}
 	ms.base = base
 
-	delta, err := NewDeltaReader("data/memory/delta.wal")
+	delta, err := NewDeltaReader(ms.deltaPath)
 	if err != nil {
 		return err
 	}
@@ -178,18 +182,21 @@ func (ms *MemorySystem) mergeSynapses(procedural []Synapse, modifications []Delt
 
 func (ms *MemorySystem) GetSynapsesBatch(neuronIDs []uint32) map[uint32][]Synapse {
 	results := make(map[uint32][]Synapse)
-	var wg sync.WaitGroup
 	var mu sync.Mutex
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, cap(ms.workerPool))
 
 	for _, id := range neuronIDs {
 		wg.Add(1)
-		ms.workerPool <- func() {
+		go func(neuronID uint32) {
 			defer wg.Done()
-			synapses := ms.GetSynapses(id)
+			sem <- struct{}{}
+			defer func() { <-sem }()
+			synapses := ms.GetSynapses(neuronID)
 			mu.Lock()
-			results[id] = synapses
+			results[neuronID] = synapses
 			mu.Unlock()
-		}
+		}(id)
 	}
 
 	wg.Wait()
@@ -264,6 +271,21 @@ func (ms *MemorySystem) integrateAdEx(neuronID, V, w, I, dt float32) (float32, f
 	return V_new, w_new, false
 }
 
+const maxNeuronStates = 100000
+
+func (ms *MemorySystem) cleanupInactiveNeurons() {
+	if len(ms.neuronStates) <= maxNeuronStates {
+		return
+	}
+	var toDelete []uint32
+	for id := range ms.neuronStates {
+		toDelete = append(toDelete, id)
+	}
+	for i := 0; i < len(toDelete)-maxNeuronStates; i++ {
+		delete(ms.neuronStates, toDelete[i])
+	}
+}
+
 func (ms *MemorySystem) GetNeuronState(neuronID uint32) (float32, float32) {
 	ms.mu.RLock()
 	defer ms.mu.RUnlock()
@@ -277,6 +299,7 @@ func (ms *MemorySystem) SetNeuronState(neuronID uint32, V, w float32) {
 	ms.mu.Lock()
 	defer ms.mu.Unlock()
 	ms.neuronStates[neuronID] = struct{ V, w float32 }{V, w}
+	ms.cleanupInactiveNeurons()
 }
 
 func (ms *MemorySystem) ApplySTDP(spikes []Spike) {

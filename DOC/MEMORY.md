@@ -656,32 +656,32 @@ func (m *MemorySystem) mergeSynapses(procedural []Synapse, modifications []Delta
 ```plaintext
 libs/
 ├── src/
-│   └── engine-memory-go/
-│       ├── cmd/
-│       │   └── mira-memory/
-│       │       └── main.go          # Точка входа (HTTP + CLI)
-│       ├── internal/
-│       │   ├── memory/
-│       │   │   ├── base.go          # Работа с base.mcog
-│       │   │   ├── delta.go         # Запись delta.wal
-│       │   │   ├── delta_reader.go  # Чтение и индекс delta.wal
-│       │   │   ├── procedural.go    # Процедурная генерация синапсов
-│       │   │   ├── compaction.go    # Фоновое слияние
-│       │   │   ├── lru.go           # LRU-кэш синапсов
-│       │   │   └── types.go         # Типы данных
-│       │   ├── mmap/
-│       │   │   ├── mmap.go          # POSIX mmap
-│       │   │   └── mmap_windows.go  # Windows mmap
-│       │   ├── prng/
-│       │   │   └── pcg32.go         # Детерминированный PRNG
-│       │   └── lz4/
-│       │       └── lz4.go           # Чистый Go LZ4 (pierrec/lz4/v4)
-│       ├── pkg/
-│       │   └── api/
-│       │       └── api.go           # HTTP API + Prometheus
-│       ├── go.mod
-│       ├── Makefile
-│       └── README.md
+│   ├── engine-memory-go/
+│   │   ├── cmd/
+│   │   │   └── engine-memory-go/
+│   │   │       ├── main.go          # Точка входа (CLI + симуляция)
+│   │   │       └── capi.go          # C-экспорты для Python
+│   │   ├── internal/
+│   │   │   ├── memory/
+│   │   │   │   ├── base.go          # Работа с base.mcog
+│   │   │   │   ├── delta.go         # Запись delta.wal
+│   │   │   │   ├── delta_reader.go  # Чтение и индекс delta.wal
+│   │   │   │   ├── procedural.go    # Процедурная генерация синапсов
+│   │   │   │   ├── compaction.go    # Фоновое слияние
+│   │   │   │   ├── lru.go           # LRU-кэш синапсов
+│   │   │   │   └── types.go         # Типы данных
+│   │   │   ├── mmap/
+│   │   │   │   ├── mmap.go          # POSIX mmap
+│   │   │   │   └── mmap_windows.go  # Windows mmap
+│   │   │   ├── prng/
+│   │   │   │   └── pcg32.go         # Детерминированный PRNG
+│   │   │   └── lz4/
+│   │   │       └── lz4.go           # Чистый Go LZ4 (pierrec/lz4/v4)
+│   │   ├── go.mod
+│   │   └── Makefile
+│   └── mira-memory-py/
+│       ├── mira_memory.pyx          # Cython-обёртка
+│       └── setup.py                 # Сборка Python-модуля
 ├── scripts/
 │   ├── bat/
 │   │   ├── go_build.bat
@@ -694,6 +694,8 @@ libs/
 └── build/
     └── engine-memory-go/
         ├── engine-memory-go.exe
+        ├── mira_memory.dll          # C-библиотека (требует GCC/MinGW)
+        ├── mira_memory.h
         ├── go.mod
         └── go.sum
 ```
@@ -921,122 +923,6 @@ func (ms *MemorySystem) handleEvent(event Event) {
 }
 ```
 
----
-
-## 🔨 Система сборки
-
-### Общая концепция
-
-Все библиотеки живут в `libs/src/<package-name>/`. Сборка централизована через скрипты в `libs/scripts/` и складывает артефакты в `libs/build/<package-name>/`.
-
-```plaintext
-libs/
-├── src/
-│   ├── engine-memory-go/      # Go пакет
-│   ├── engine-memory-py/      # Python пакет (будущий)
-│   └── engine-memory-cython/  # Cython пакет (будущий)
-├── scripts/
-│   ├── bat/                   # Windows-хелперы
-│   │   ├── go_build.bat
-│   │   ├── python_build.bat
-│   │   └── cython_build.bat
-│   └── sh/                    # Linux/macOS-хелперы
-│       ├── go_build.sh
-│       ├── python_build.sh
-│       └── cython_build.sh
-└── build/
-    └── engine-memory-go/      # Артефакты после сборки
-        ├── engine-memory-go.exe
-        ├── go.mod
-        └── go.sum
-```
-
-### Быстрый старт
-
-**Windows:**
-
-```cmd
-libs\build.bat
-```
-
-**Linux / macOS:**
-
-```bash
-chmod +x libs/build.sh
-libs/build.sh
-```
-
-### Поддерживаемые типы пакетов
-
-| Тип    | Маркер           | Результат                    | Зависимости             |
-| ------ | ---------------- | ---------------------------- | ----------------------- |
-| Go     | `go.mod`         | `.exe` / бинарник + `go.mod` | Go toolchain            |
-| Python | `pyproject.toml` | `.whl` wheel-файл            | Python, `pip`, `build`  |
-| Cython | `setup.py`       | `.whl` + `.pyd`/`.so`        | Python, `cython`, `pip` |
-
-### Логика определения
-
-1. Если есть `go.mod` → **Go-пакет**
-2. Иначе если есть `pyproject.toml` → **Python-пакет**
-3. Иначе если есть `setup.py` → **Cython-пакет**
-4. Иначе → пропуск
-
----
-
-## 🐍 Интеграция с Python
-
-### Почему `.exe` нельзя импортировать напрямую
-
-Go компилирует в нативный исполняемый файл (`engine-memory-go.exe`), а не в Python-модуль (`.pyd`/`.so`). Поэтому интеграция идёт через **внешний процесс** или **HTTP API**.
-
-### Вариант 1: CLI / subprocess
-
-```python
-import subprocess
-import json
-
-MIRA_BIN = "libs/build/engine-memory-go/engine-memory-go.exe"
-
-result = subprocess.run(
-    [MIRA_BIN, "stats"],
-    capture_output=True,
-    text=True,
-)
-
-stats = json.loads(result.stdout)
-print(f"Neurons: {stats['neurons_total']}")
-```
-
-### Вариант 2: HTTP API (встроенный сервер)
-
-```python
-import requests
-
-BASE_URL = "http://localhost:8080"
-
-# Статистика
-stats = requests.get(f"{BASE_URL}/stats").json()
-
-# Данные нейрона
-neuron_id = 12345
-neuron = requests.get(f"{BASE_URL}/neuron/{neuron_id}").json()
-
-# Запуск compaction
-requests.post(f"{BASE_URL}/compact")
-```
-
-Запуск сервера:
-
-```cmd
-libs\build\engine-memory-go\engine-memory-go.exe --http :8080
-```
-
-### Вариант 3: gRPC / JSON-RPC (перспектива)
-
-Для низко-латентных вызовов из Python можно добавить gRPC-интерфейс в Go-сервис и генерировать Python-стаб через `grpcio-tools`.
-
----
-
 ## 💻 Примеры кода
 
 ### Инициализация системы памяти
@@ -1045,50 +931,46 @@ libs\build\engine-memory-go\engine-memory-go.exe --http :8080
 package main
 
 import (
-    "log"
-    "runtime"
+	"flag"
+	"log"
+	"runtime"
+	"time"
 
-    "github.com/Major-Woolfi/Project_Mira/libs/src/engine-memory-go/internal/memory"
+	"github.com/Major-Woolfi/Project_Mira/libs/src/engine-memory-go/internal/memory"
 )
 
 func main() {
-    // Устанавливаем количество потоков = количество ядер CPU
-    runtime.GOMAXPROCS(runtime.NumCPU())
+	basePath := flag.String("base", "DATA/MIRA/base.mcog", "Path to base.mcog")
+	deltaPath := flag.String("delta", "DATA/MIRA/delta.wal", "Path to delta.wal")
+	fps := flag.Int("fps", 60, "Simulation FPS")
+	flag.Parse()
 
-    // Инициализируем систему памяти
-    ms := memory.NewMemorySystem(
-        "data/memory/base.mcog",
-        "data/memory/delta.wal",
-        runtime.NumCPU(), // Worker pool
-    )
+	runtime.GOMAXPROCS(runtime.NumCPU())
 
-    // Открываем файлы
-    if err := ms.Open(); err != nil {
-        log.Fatal(err)
-    }
-    defer ms.Close()
+	ms := memory.NewMemorySystem(*basePath, *deltaPath, runtime.NumCPU())
 
-    // Запускаем event loop
-    ms.StartEventLoop()
+	if err := ms.Open(); err != nil {
+		log.Fatal(err)
+	}
+	defer ms.Close()
 
-    // Запускаем compaction в фоне
-    go ms.RunCompactionLoop()
+	ms.StartEventLoop()
 
-    // Основной цикл работы Миры
-    for {
-        // Читаем синапсы для активных нейронов
-        activeNeurons := ms.GetActiveNeurons()
-        synapses := ms.GetSynapsesBatch(activeNeurons)
+	go ms.RunCompactionLoop()
 
-        // Обрабатываем спайки
-        spikes := ms.SimulateStep(synapses)
+	ticker := time.NewTicker(time.Duration(1000/int(*fps)) * time.Millisecond)
+	defer ticker.Stop()
 
-        // Применяем STDP
-        ms.ApplySTDP(spikes)
+	for range ticker.C {
+		activeNeurons := ms.GetActiveNeurons()
+		synapses := ms.GetSynapsesBatch(activeNeurons)
 
-        // Логируем статистику
-        ms.LogStats()
-    }
+		spikes := ms.SimulateStep(synapses)
+
+		ms.ApplySTDP(spikes)
+
+		ms.LogStats()
+	}
 }
 ```
 
@@ -1707,7 +1589,8 @@ func (m *Migrator) MigrateIfNeeded(basePath string) error {
 ### Этап 4: Интеграция (v0.5)
 
 - [x] Собрать Go-модуль в `libs/build/engine-memory-go/`
-- [x] Добавить HTTP API для Python (`pkg/api/api.go`)
+- [x] Добавить C-экспорты (`capi.go`) для Python
+- [x] Создать Cython-обёртку `mira_memory.pyx`
 - [x] Реализовать `GetSynapses()` с объединением Base + Delta
 - [ ] Написать фоновый compaction
 - [ ] Интегрировать с Core AI
@@ -1725,6 +1608,49 @@ func (m *Migrator) MigrateIfNeeded(basePath string) error {
 - [ ] Реализовать SIMD (AVX2) для AdEx-интеграции
 - [ ] Настроить pprof и Prometheus-метрики
 - [ ] Провести нагрузочное тестирование
+
+---
+
+## 🔌 Интеграция с Python через Cython
+
+Go-код компилируется в нативную разделяемую библиотеку (`.dll` / `.so` / `.dylib`) через `-buildmode=c-shared`, после чего оборачивается Cython-модулем.
+
+### Требования
+
+- **Windows:** MinGW/GCC (например, через [MSYS2](https://www.msys2.org/)) + Visual C++ Build Tools
+- **Linux/macOS:** GCC + Python dev-заголовки + Cython
+
+### Сборка
+
+```bash
+# 1. Собрать Go-библиотеку
+cd MIRA/libs/src/engine-memory-go
+make cshared
+
+# 2. Собрать Cython-модуль
+cd ../mira-memory-py
+python setup.py build_ext --inplace
+```
+
+### Использование
+
+```python
+from mira_memory import MiraMemory
+
+# Контекстный менеджер автоматически освобождает ресурсы
+with MiraMemory("DATA/MIRA/base.mcog", "DATA/MIRA/delta.wal") as mem:
+    neuron = mem.get_neuron(12345)
+    print(f"Neuron {neuron['id']}: threshold={neuron['threshold']} mV")
+
+    stats = mem.get_stats()
+    print(f"Total neurons: {stats['total_neurons']}")
+```
+
+### Примечания
+
+- Данные памяти хранятся в `DATA/MIRA/` относительно корня проекта.
+- C-библиотека не собирается на этой машине из-за отсутствия GCC/MinGW.
+- Для продакшена рекомендуется собирать `.whl` пакет и распространять его через PyPI.
 
 ---
 
@@ -1776,5 +1702,6 @@ func (m *Migrator) MigrateIfNeeded(basePath string) error {
 - **PCG32 PRNG:** https://www.pcg-random.org/
 - **LZ4 compression:** https://lz4.github.io/lz4/
 - **Go mmap package:** https://pkg.go.dev/golang.org/x/sys/unix#Mmap
-- **Prometheus client_golang:** https://github.com/prometheus/client_golang
+- **Cython:** https://cython.org/
+- **CGO shared library:** https://go.dev/blog/cgo
 - **Blue Brain Project:** https://www.epfl.ch/research/domains/bluebrain/

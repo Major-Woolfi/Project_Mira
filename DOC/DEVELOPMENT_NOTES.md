@@ -93,3 +93,107 @@ import ANOTHERLIB as alib
 ## Заключение
 
 Соблюдение этих принципов и структуры поможет обеспечить чистый, читабельный и поддерживаемый код, который будет легко понимать и использовать другими разработчиками (или вами в будущем). Это также поможет обеспечить единообразие в коде и улучшить его качество, что является важным для успешной разработки проекта.
+
+---
+
+## 🔨 Система сборки
+
+### Общая концепция
+
+Все библиотеки живут в `libs/src/<package-name>/`. Сборка централизована через скрипты в `libs/scripts/` и складывает артефакты в `libs/build/<package-name>/`.
+
+```plaintext
+libs/
+├── src/
+│   ├── engine-memory-go/      # Go пакет
+│   ├── engine-memory-py/      # Python пакет (будущий)
+│   └── engine-memory-cython/  # Cython пакет (будущий)
+├── scripts/
+│   ├── bat/                   # Windows-хелперы
+│   │   ├── go_build.bat
+│   │   ├── python_build.bat
+│   │   └── cython_build.bat
+│   └── sh/                    # Linux/macOS-хелперы
+│       ├── go_build.sh
+│       ├── python_build.sh
+│       └── cython_build.sh
+└── build/
+    └── engine-memory-go/      # Артефакты после сборки
+        ├── engine-memory-go.exe
+        ├── go.mod
+        └── go.sum
+```
+
+### Быстрый старт
+
+**Windows:**
+
+```cmd
+libs\build.bat
+```
+
+**Linux / macOS:**
+
+```bash
+chmod +x libs/build.sh
+libs/build.sh
+```
+
+### Поддерживаемые типы пакетов
+
+| Тип    | Маркер           | Результат                    | Зависимости             |
+| ------ | ---------------- | ---------------------------- | ----------------------- |
+| Go     | `go.mod`         | `.exe` / бинарник + `go.mod` | Go toolchain            |
+| Python | `pyproject.toml` | `.whl` wheel-файл            | Python, `pip`, `build`  |
+| Cython | `setup.py`       | `.whl` + `.pyd`/`.so`        | Python, `cython`, `pip` |
+
+### Логика определения
+
+1. Если есть `go.mod` → **Go-пакет**
+2. Иначе если есть `pyproject.toml` → **Python-пакет**
+3. Иначе если есть `setup.py` → **Cython-пакет**
+4. Иначе → пропуск
+
+---
+
+## 🐍 Интеграция с Python
+
+### Почему `.exe` нельзя импортировать напрямую
+
+Go компилирует в нативный исполняемый файл (`engine-memory-go.exe`), а не в Python-модуль (`.pyd`/`.so`). Поэтому интеграция идёт через **C-библиотеку** + **Cython-обёртку**.
+
+### Вариант 1: C API + Cython (рекомендуемый)
+
+```python
+from mira_memory import MiraMemory
+
+with MiraMemory("DATA/MIRA/base.mcog", "DATA/MIRA/delta.wal") as mem:
+    neuron = mem.get_neuron(12345)
+    print(f"Neuron {neuron['id']}: threshold={neuron['threshold']} mV")
+
+    stats = mem.get_stats()
+    print(f"Total neurons: {stats['total_neurons']}")
+```
+
+### Вариант 2: CLI / subprocess
+
+```python
+import subprocess
+import json
+
+MIRA_BIN = "libs/build/engine-memory-go/engine-memory-go.exe"
+
+result = subprocess.run(
+    [MIRA_BIN, "--fps", "30"],
+    capture_output=True,
+    text=True,
+)
+
+# Процесс работает до прерывания; статистика доступна через C API
+```
+
+### Вариант 3: gRPC / JSON-RPC (перспектива)
+
+Для низко-латентных вызовов из Python можно добавить gRPC-интерфейс в Go-сервис и генерировать Python-стаб через `grpcio-tools`.
+
+---
